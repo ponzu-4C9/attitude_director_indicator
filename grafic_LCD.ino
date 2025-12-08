@@ -1,43 +1,94 @@
 #include <TFT_eSPI.h>
 #define FOR(i,n) for(int i = 0;i < n;i++)
 #define pai 3.141592
-
-uint16_t rgb(uint8_t r, uint8_t g, uint8_t b)
-{
-  // 1. R成分を5ビットに変換し、11ビット左にシフト (R_4 R_3 ... R_0 | 0000 0000 000)
-  // 255を31に圧縮するため、右に3ビットシフト (R_8bit >> 3)
-  uint16_t r5 = (r >> 3) << 11;
-
-  // 2. G成分を6ビットに変換し、5ビット左にシフト (0000 0 | G_5 G_4 ... G_0 | 00000)
-  // 255を63に圧縮するため、右に2ビットシフト (G_8bit >> 2)
-  uint16_t g6 = (g >> 2) << 5;
-
-  // 3. B成分を5ビットに変換 (0000 0000 000 | B_4 B_3 ... B_0)
-  // 255を31に圧縮するため、右に3ビットシフト (B_8bit >> 3)
-  uint16_t b5 = b >> 3;
-
-  // 4. 全ての成分をビットOR演算で結合
-  return r5 | g6 | b5;
-}
-
-void DrawLine(int x0,int y0,int x1,int y1,uint16_t color){
-  int cw = tft.width()/2;
-  int ch = tft.height()/2;
-  tft.drawLine(x0+cw, -y0+ch, x1+cw, -y1+ch, color);
-}
+#define rgb tft.color565
 
 TFT_eSPI tft = TFT_eSPI(); 
-
-
 void setup() {
   tft.begin();
   tft.setRotation(0);
-  cw = tft.width()/2;
-  ch = tft.height()/2;
 
   tft.fillScreen(TFT_BLACK); 
 }
 
+void DrawPixel(int x,int y,uint16_t color){
+  tft.drawPixel(x+tft.width()/2, -y+tft.height()/2, color);
+}
+
+void DrawLine(int x0,int y0,int x1,int y1,uint16_t color){
+  tft.drawLine(x0+tft.width()/2, -y0+tft.height()/2, x1+tft.width()/2, -y1+tft.height()/2, color);
+}
+void DrawTriangle(int x0,int y0,int x1,int y1,int x2,int y2,uint16_t color){
+  x0 = x0+tft.width()/2;
+  x1 = x1+tft.width()/2;
+  x2 = x2+tft.width()/2;
+  y0 = -y0+tft.height()/2;
+  y1 = -y1+tft.height()/2;
+  y2 = -y2+tft.height()/2;
+  tft.drawTriangle(x0,y0,x1,y1,x2,y2, color);
+}
+void FillTriangle(int x0,int y0,int x1,int y1,int x2,int y2,uint16_t color){
+  x0 = x0+tft.width()/2;
+  x1 = x1+tft.width()/2;
+  x2 = x2+tft.width()/2;
+  y0 = -y0+tft.height()/2;
+  y1 = -y1+tft.height()/2;
+  y2 = -y2+tft.height()/2;
+  tft.fillTriangle(x0,y0,x1,y1,x2,y2, color);
+}
+
+void DrawFixedGUI(){
+  int lineSpacing = 5;
+  uint16_t scaleColor = TFT_GREEN;
+
+  DrawLine(-5,0,5,0,scaleColor);//中心の水平線
+
+  //目盛り生成
+  FOR(i,10){//上半分
+    if(i % 5 ==0){
+      DrawLine(-15,lineSpacing*i,15,lineSpacing*i,scaleColor);
+    }else{
+      DrawLine(-10,lineSpacing*i,10,lineSpacing*i,scaleColor);
+    }
+  }
+  FOR(i,10){//下半分
+    if(i % 5 ==0){
+      DrawLine(-15,lineSpacing*(-i),15,lineSpacing*(-i),scaleColor);
+    }else{
+      DrawLine(-10,lineSpacing*(-i),10,lineSpacing*(-i),scaleColor);
+    }
+  }
+
+  //進行方向を示す三角形
+  uint16_t dir_tri_color = TFT_WHITE;
+  uint16_t dir_tri_outline_clr = TFT_GREEN;
+  int ax = 13;
+  int bx = ax+48;
+  int cx = bx;
+  int dx = cx - 19;
+  int ay = 0;
+  int by = ay-15;
+  int cy = by-7;
+  int dy = cy ;
+  DrawTriangle(ax,ay,bx,by,dx,dy,dir_tri_color);
+  DrawTriangle(bx,by,cx,cy,dx,dy,dir_tri_color);
+
+  DrawTriangle(-ax,ay,-bx,by,-dx,dy,dir_tri_color);
+  DrawTriangle(-bx,by,-cx,cy,-dx,dy,dir_tri_color);
+
+  //画面の横真っ二つの線がわかるようにある三角形
+  int ex = 100;
+  int fx = ex+25;
+  int ey = 0;
+  int fy = 10;
+  DrawTriangle(ex,ey,fx,fy,fx,-fy,dir_tri_color);
+  DrawTriangle(-ex,ey,-fx,fy,-fx,-fy,dir_tri_color);
+
+  //ロール目盛りの円弧
+  for(int i = -100;i < 101;i++){
+    DrawPixel(i,(int)sqrt(225.0 * 225.0 - (double)i * i);,dir_tri_outline_clr);
+  }
+}
 
 
 double theta = 0;
@@ -53,5 +104,4 @@ void loop() {
   y1a = tan(theta)*(160)+(-k*fai);
 
   DrawLine(-160,y0a,160,y1a, rgb(105,212,16));
-  
 }
