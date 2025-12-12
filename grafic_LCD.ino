@@ -8,6 +8,19 @@
 TFT_eSPI tft = TFT_eSPI();
 ICM20948_WE myIMU = ICM20948_WE(ICM20948_ADDR);
 
+
+typedef struct {
+  float x;
+  float y;
+  float z;
+  float w;
+} Vector;
+
+typedef struct {
+  Vector a;
+  Vector b;
+} Line;
+
 void applyMatrix(double a, double b, double c, double d,
                  double *x, double *y) {
 
@@ -130,17 +143,6 @@ void DrawFixedGUI(int lineSpacing = 5) {
 }
 
 
-typedef struct {
-  float x;
-  float y;
-  float z;
-  float w;
-} Vector;
-
-typedef struct {
-  Vector a;
-  Vector b;
-} Line;
 
 #define SIZE 4
 void multiply_matrix(const float A[SIZE][SIZE], const float B[SIZE][SIZE], float C[SIZE][SIZE]) {
@@ -167,37 +169,37 @@ void applyMatrix4(const float M[SIZE][SIZE], Vector *V) {
   V->w = temp.w;
 }
 
-const double z_max = 1000;
+double z_max = 1000;
 const int h_num = 10;
-const double rs = z_max / h_num;  //横線間隔
-const int v_num = 10;
+const double hrs = z_max / h_num;  //横線間隔
+const double vrs = hrs/15;//縦線間隔
+const int v_num = 11;//縦線は奇数個にしてそうじゃないと中心にこない
+const float ground_width = 200;
 
 Line hline[h_num];
 void hlineinitializer() {  //これは直線だからとりあえず長さを1の線分として定義
   for (int i = 0; i < h_num; i++) {
-    hline[i].a.x = 0;
-    hline[i].b.x = 1;
-
+    hline[i].a.x = -ground_width/2;
+    hline[i].b.x = ground_width/2;
     hline[i].a.y = hline[i].b.y = 0;
-
-    hline[i].a.z = hline[i].b.z = i * rs;
-
+    hline[i].a.z = hline[i].b.z = i * hrs;
     hline[i].a.w = hline[i].b.w = 1;
   }
 }
 Line vline[v_num];  //始点z_max,終点0の線分
 void vlineinitializer() {
   for (int i = 0; i < v_num; i++) {
-    vline[i].a.x = vline[i].b.x = i * rs;
+    vline[i].a.x = vline[i].b.x = (i-(v_num/2)) * vrs;
     vline[i].a.y = vline[i].b.y = 0;
     vline[i].a.z = z_max;
-    vline[i].b.z = 0;
+    vline[i].b.z = 100;
     vline[i].a.w = vline[i].b.w = 1;
   }
 }
 
 
 void setup() {
+  z_max -= h_num;
   Wire.begin();
   Serial.begin(115200);
   if (!myIMU.init()) {
@@ -214,9 +216,6 @@ void setup() {
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
 
-  //ここで方眼を初期化
-  hlineinitializer();
-  vlineinitializer();
 }
 
 float T[SIZE][SIZE] = {
@@ -224,64 +223,106 @@ float T[SIZE][SIZE] = {
   { 0, 1, 0, 0 },
   { 0, 0, 1, 0 },
   { 0, 0, 0, 1 }
-} 
+} ;
 float Rx[SIZE][SIZE] = {
   { 1, 0, 0, 0 },
   { 0, 1, 0, 0 },
   { 0, 0, 1, 0 },
   { 0, 0, 0, 1 }
-} 
+} ;
 float Rz[SIZE][SIZE] = {
   { 1, 0, 0, 0 },
   { 0, 1, 0, 0 },
   { 0, 0, 1, 0 },
   { 0, 0, 0, 1 }
-} 
+} ;
+
 float M_temp[SIZE][SIZE];
 float M[SIZE][SIZE];
 
-int y0a = 0;
-int y1a = 0;
+Line hlineTemp[h_num];
+Line vlineTemp[v_num];
+
+int hxy[h_num][4];
+int vxy[v_num][4];
+
+
 void loop() {
 
   myIMU.readSensor();
 
   float pitch = myIMU.getPitch();
   float roll = myIMU.getRoll();
-  Serial.print("Pitch:  ");
-  Serial.print(pitch, 10);
-  Serial.print("  |  Roll: ");
-  Serial.print(roll, 10);
-  Serial.println("");
 
   float Spacing = 10;
 
   float h = 10;  //高度単位は画面px
+
+  float f = 1000;//3Dグラフィックの焦点
+
+  double fai = pitch * (PI / 180);
+  double theta = roll * (PI / 180);
+
+  Serial.printf("pitch%.15f, roll%.15f\n",pitch,roll);
+
+  double Spfai = Spacing*pitch;
+  double numerator = -(Spfai * z_max + h * f * cos(theta));
+  double denominator = z_max * f * cos(theta) - Spfai * h;
+  double phi = atan2(numerator, denominator);
+
   T[1][3] = -h;  //下にh文下げる
 
-  float fai = -pitch * PI / 180;
-  Rx[1][1] = cos(fai);Rx[1][2] = sin(fai);
-  Rx[2][1] = -sin(fai);Rx[2][2] = cos(fai)
+  Rx[1][1] = cos(-phi);Rx[1][2] = sin(-phi);
+  Rx[2][1] = -sin(-phi);Rx[2][2] = cos(-phi);
 
-  float theta = -roll * PI / 180.0;
-  Rz[0][0] = cos(theta);Rz[1][0] = sin(theta);
-  Rz[0][1] = -sin(theta);Rz[1][1] = cos(theta);
+  Rz[0][0] = cos(-theta);Rz[1][0] = sin(-theta);
+  Rz[0][1] = -sin(-theta);Rz[1][1] = cos(-theta);
+
 
   multiply_matrix(Rz,Rx,M_temp);
   multiply_matrix(M_temp,T,M);
 
   for (int i = 0; i < h_num; i++) {
-    applyMatrix4(M,hline[i].a);
-    applyMatrix4(M,hline[i].b);
+    DrawLine(hxy[i][0], hxy[i][1], hxy[i][2], hxy[i][3], TFT_BLACK);
   }
   for (int i = 0; i < v_num; i++) {
-    applyMatrix4(M,vline[i].a);
-    applyMatrix4(M,vline[i].b);
+    DrawLine(vxy[i][0], vxy[i][1], vxy[i][2], vxy[i][3], TFT_BLACK);
   }
-  DrawLine(-160, y0a, 160, y1a, TFT_BLACK);
-  y0a = tan(theta) * (-160) - Spacing * pitch;
-  y1a = tan(theta) * (160) - Spacing * pitch;
-  DrawLine(-160, y0a, 160, y1a, TFT_GREEN);
+  
+  hlineinitializer();
+  vlineinitializer();
+
+  for (int i = 0; i < h_num; i++) {
+    applyMatrix4(M,&(hline[i].a));
+    applyMatrix4(M,&(hline[i].b));
+    if (hline[i].a.z > 1.0 && hline[i].b.z > 1.0) { // カメラより後ろ（z<=0）を描画しないガード
+      hxy[i][0] = (f * hline[i].a.x / hline[i].a.z);
+      hxy[i][1] = (f * hline[i].a.y / hline[i].a.z);
+      hxy[i][2] = (f * hline[i].b.x / hline[i].b.z);
+      hxy[i][3] = (f * hline[i].b.y / hline[i].b.z);
+    }else {
+      // 【重要】Zが手前すぎたら座標をリセットして、描画（消去）させない
+      hxy[i][0] = hxy[i][1] = hxy[i][2] = hxy[i][3] = 0;
+    }
+  }
+
+  for (int i = 0; i < v_num; i++) {
+    applyMatrix4(M,&(vline[i].a));
+    applyMatrix4(M,&(vline[i].b));
+    if (vline[i].a.z > 0 && vline[i].b.z > 0) { // カメラより後ろ（z<=0）を描画しないガード
+      vxy[i][0] = (f * vline[i].a.x / vline[i].a.z);
+      vxy[i][1] = (f * vline[i].a.y / vline[i].a.z);
+      vxy[i][2] = (f * vline[i].b.x / vline[i].b.z);
+      vxy[i][3] = (f * vline[i].b.y / vline[i].b.z);
+    }
+  }
+
+  for (int i = 0; i < h_num; i++) {
+    DrawLine(hxy[i][0], hxy[i][1], hxy[i][2], hxy[i][3], TFT_GREEN);
+  }
+  for (int i = 0; i < v_num; i++) {
+    DrawLine(vxy[i][0], vxy[i][1], vxy[i][2], vxy[i][3], TFT_GREEN);
+  }
 
   DrawFixedGUI(Spacing);
 }
