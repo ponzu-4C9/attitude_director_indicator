@@ -10,10 +10,10 @@ ICM20948_WE myIMU = ICM20948_WE(ICM20948_ADDR);
 
 
 typedef struct {
-  float x;
-  float y;
-  float z;
-  float w;
+  double x;
+  double y;
+  double z;
+  double w;
 } Vector;
 
 typedef struct {
@@ -21,8 +21,14 @@ typedef struct {
   Vector b;
 } Line;
 
-void applyMatrix(double a, double b, double c, double d,
-                 double *x, double *y) {
+typedef struct {
+  double x;
+  double y;
+} Point;
+
+
+
+void applyMatrix(double a, double b, double c, double d, double *x, double *y) {
 
   // 計算結果を一時的に保持する変数
   double newX;
@@ -39,6 +45,7 @@ void applyMatrix(double a, double b, double c, double d,
   *y = newY;
 }
 
+//描画関数を数学的な座標にオフセット
 void DrawPixel(int x, int y, uint16_t color) {
   tft.drawPixel(x + tft.width() / 2, -y + tft.height() / 2, color);
 }
@@ -65,6 +72,17 @@ void FillTriangle(int x0, int y0, int x1, int y1, int x2, int y2, uint16_t color
   tft.fillTriangle(x0, y0, x1, y1, x2, y2, color);
 }
 
+//ロール角を表す三角形の初期化
+Point topTri[3];
+const double gy_dis = 200;  //原点からの円弧の距離
+void topTriinitializer(){
+  const int size = 20;
+  topTri[0].x = 0;topTri[0].y = gy_dis;
+  topTri[1].x = size/2;topTri[1].y = gy_dis-size;
+  topTri[2].x = -size/2;topTri[2].y = gy_dis-size;
+}
+
+//目盛り等の生成
 void DrawFixedGUI(int lineSpacing = 5) {
 
   uint16_t scaleColor = TFT_WHITE;
@@ -116,7 +134,6 @@ void DrawFixedGUI(int lineSpacing = 5) {
 
   //ロール目盛りの生成
   uint16_t rollScaleColor = TFT_WHITE;
-  const double gy_dis = 200;  //原点からの円弧の距離
   int scaleLength = 10;
   const double scaleIntervalAngle = 5 * (PI / 180);  //度に(pai/180)を掛けるとラジアンに変換できる。
   int tickCount = 7;
@@ -145,7 +162,7 @@ void DrawFixedGUI(int lineSpacing = 5) {
 
 
 #define SIZE 4
-void multiply_matrix(const float A[SIZE][SIZE], const float B[SIZE][SIZE], float C[SIZE][SIZE]) {
+void multiply_matrix(const double A[SIZE][SIZE], const double B[SIZE][SIZE], double C[SIZE][SIZE]) {
   // 行列の積 C[i][j] = Sum(A[i][k] * B[k][j])
   for (int i = 0; i < SIZE; i++) {      // 結果Cの行 (i)
     for (int j = 0; j < SIZE; j++) {    // 結果Cの列 (j)
@@ -157,7 +174,7 @@ void multiply_matrix(const float A[SIZE][SIZE], const float B[SIZE][SIZE], float
   }
 }
 
-void applyMatrix4(const float M[SIZE][SIZE], Vector *V) {
+void applyMatrix4(const double M[SIZE][SIZE], Vector *V) {
   Vector temp;
   temp.x = M[0][0] * V->x + M[0][1] * V->y + M[0][2] * V->z + M[0][3] * V->w;
   temp.y = M[1][0] * V->x + M[1][1] * V->y + M[1][2] * V->z + M[1][3] * V->w;
@@ -172,9 +189,9 @@ void applyMatrix4(const float M[SIZE][SIZE], Vector *V) {
 double z_max = 1000;
 const int h_num = 10;
 const double hrs = z_max / h_num;  //横線間隔
-const double vrs = hrs/15;//縦線間隔
+const double vrs = hrs/10;//縦線間隔
 const int v_num = 11;//縦線は奇数個にしてそうじゃないと中心にこない
-const float ground_width = 200;
+const double ground_width = 200;
 
 Line hline[h_num];
 void hlineinitializer() {  //これは直線だからとりあえず長さを1の線分として定義
@@ -182,7 +199,7 @@ void hlineinitializer() {  //これは直線だからとりあえず長さを1�
     hline[i].a.x = -ground_width/2;
     hline[i].b.x = ground_width/2;
     hline[i].a.y = hline[i].b.y = 0;
-    hline[i].a.z = hline[i].b.z = i * hrs;
+    hline[i].a.z = hline[i].b.z = (i+1) * hrs;
     hline[i].a.w = hline[i].b.w = 1;
   }
 }
@@ -192,14 +209,13 @@ void vlineinitializer() {
     vline[i].a.x = vline[i].b.x = (i-(v_num/2)) * vrs;
     vline[i].a.y = vline[i].b.y = 0;
     vline[i].a.z = z_max;
-    vline[i].b.z = 100;
+    vline[i].b.z = 10;
     vline[i].a.w = vline[i].b.w = 1;
   }
 }
 
 
 void setup() {
-  z_max -= h_num;
   Wire.begin();
   Serial.begin(115200);
   if (!myIMU.init()) {
@@ -218,27 +234,29 @@ void setup() {
 
 }
 
-float T[SIZE][SIZE] = {
+double T[SIZE][SIZE] = {
   { 1, 0, 0, 0 },
   { 0, 1, 0, 0 },
   { 0, 0, 1, 0 },
   { 0, 0, 0, 1 }
 } ;
-float Rx[SIZE][SIZE] = {
+double Rx[SIZE][SIZE] = {
   { 1, 0, 0, 0 },
   { 0, 1, 0, 0 },
   { 0, 0, 1, 0 },
   { 0, 0, 0, 1 }
 } ;
-float Rz[SIZE][SIZE] = {
+double Rz[SIZE][SIZE] = {
   { 1, 0, 0, 0 },
   { 0, 1, 0, 0 },
   { 0, 0, 1, 0 },
   { 0, 0, 0, 1 }
 } ;
 
-float M_temp[SIZE][SIZE];
-float M[SIZE][SIZE];
+double Rz_tri[2][2];
+
+double M_temp[SIZE][SIZE];
+double M[SIZE][SIZE];
 
 Line hlineTemp[h_num];
 Line vlineTemp[v_num];
@@ -254,16 +272,27 @@ void loop() {
   float pitch = myIMU.getPitch();
   float roll = myIMU.getRoll();
 
-  float Spacing = 10;
+  double Spacing = 10;
 
-  float h = 10;  //高度単位は画面px
+  double h = 5;  //高度単位は画面px
 
-  float f = 1000;//3Dグラフィックの焦点
+  double f = 1000;//3Dグラフィックの焦点
 
   double fai = pitch * (PI / 180);
   double theta = roll * (PI / 180);
 
   Serial.printf("pitch%.15f, roll%.15f\n",pitch,roll);
+
+
+  Rz_tri[0][0] = cos(-theta);Rz_tri[0][1] = -sin(-theta);
+  Rz_tri[1][0] = sin(-theta);Rz_tri[1][1] = cos(-theta);
+  DrawTriangle(topTri[0].x,topTri[0].y,topTri[1].x,topTri[1].y,topTri[2].x,topTri[2].y,TFT_BLACK);
+  topTriinitializer();
+  for(int i = 0;i < 3;i++){
+    applyMatrix(Rz_tri[0][0],Rz_tri[0][1],Rz_tri[1][0],Rz_tri[1][1],&topTri[i].x,&topTri[i].y);
+  }
+  DrawTriangle(topTri[0].x,topTri[0].y,topTri[1].x,topTri[1].y,topTri[2].x,topTri[2].y,TFT_GREEN);
+
 
   double Spfai = Spacing*pitch;
   double numerator = -(Spfai * z_max + h * f * cos(theta));
@@ -317,9 +346,25 @@ void loop() {
     }
   }
 
+  int haaa[4];
   for (int i = 0; i < h_num; i++) {
     DrawLine(hxy[i][0], hxy[i][1], hxy[i][2], hxy[i][3], TFT_GREEN);
+    if(i == h_num-1){
+      haaa[0]=hxy[i][0];
+      haaa[1]=hxy[i][1];
+      haaa[2]=hxy[i][2];
+      haaa[3]=hxy[i][3];
+    }
   }
+  double a = (double)(haaa[3] - haaa[1]) / (double)(haaa[2] - haaa[0]);
+  double b = haaa[1] - a * haaa[0];
+
+  for(int j = 0;j < 4;j++){
+   Serial.printf("%d|", haaa[j]);
+  }
+  Serial.printf("\ny = %f * x + %f\n", a, b);
+
+
   for (int i = 0; i < v_num; i++) {
     DrawLine(vxy[i][0], vxy[i][1], vxy[i][2], vxy[i][3], TFT_GREEN);
   }
