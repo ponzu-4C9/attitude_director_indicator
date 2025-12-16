@@ -2,7 +2,6 @@
 #include <Wire.h>
 #include <ICM20948_WE.h>
 #define ICM20948_ADDR 0x68
-#define FOR(i, n) for (int i = 0; i < n; i++)
 #define rgb tft.color565
 
 TFT_eSPI tft = TFT_eSPI();
@@ -217,7 +216,6 @@ void vlineinitializer() {
 
 void setup() {
   Wire.begin();
-  Serial.begin(115200);
   if (!myIMU.init()) {
     Serial.println("ICM20948 does not respond");
   } else {
